@@ -1,95 +1,102 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+"use client";
 
-export default function Home() {
-  return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol>
-          <li>
-            Get started by editing <code>src/app/page.tsx</code>.
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+import { useEffect, useRef, useState } from "react";
+import * as fabric from "fabric";
+import { EraserBrush } from "@erase2d/fabric";
 
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={styles.secondary}
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className={styles.footer}>
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
-  );
-}
+const DEFULT_COLOR = "#000000";
+const DEFULT_WIDTH = 10;
+
+export const App = () => {
+  const canvasEl = useRef<HTMLCanvasElement>(null);
+  const [canvas, setCanvas] = useState<fabric.Canvas | null>(null);
+
+  const [color, setColor] = useState<string>(DEFULT_COLOR);
+  const [width, setWidth] = useState<number>(DEFULT_WIDTH);
+
+  useEffect(() => {
+    if (canvasEl.current === null) {
+      return;
+    }
+    const canvas = new fabric.Canvas(canvasEl.current);
+    setCanvas(canvas);
+
+    // 手書き機能
+    const pen = new fabric.PencilBrush(canvas);
+    pen.color = color;
+    pen.width = width;
+    canvas.freeDrawingBrush = pen;
+    canvas.isDrawingMode = true;
+
+    // 消しゴムで消せるようにする
+    canvas.on("object:added", (event) => {
+      event.target.erasable = true;
+    });
+
+    return () => {
+      canvas.dispose();
+    };
+  }, []);
+
+  const changeToRed = () => {
+   if (canvas?.freeDrawingBrush === undefined) {
+     return;
+   }
+   canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
+   canvas.freeDrawingBrush.color = "#ff0000";
+   canvas.freeDrawingBrush.width = width;
+   setColor("#ff0000");
+ };
+
+ const changeToBlack = () => {
+   if (canvas?.freeDrawingBrush === undefined) {
+    return;
+   }
+   canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
+   canvas.freeDrawingBrush.color = "#000000";
+   canvas.freeDrawingBrush.width = width;
+   setColor("#000000");
+ };
+
+ const changeToThick = () => {
+   if (canvas?.freeDrawingBrush === undefined) {
+     return;
+   }
+   canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
+   canvas.freeDrawingBrush.width = 20;
+   canvas.freeDrawingBrush.color = color;
+   setWidth(20);
+ };
+
+ const changeToThin = () => {
+   if (canvas?.freeDrawingBrush === undefined) {
+     return;
+   }
+   canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
+   canvas.freeDrawingBrush.width = 10;
+   canvas.freeDrawingBrush.color = color;
+   setWidth(10);
+ };
+
+ const changeToEraser = () => {
+  if (canvas?.freeDrawingBrush === undefined) {
+    return;
+  }
+  const eraser = new EraserBrush(canvas);
+  canvas.freeDrawingBrush = eraser;
+  canvas.freeDrawingBrush.width = 20;
+ };
+
+ return (
+   <div>
+     <button onClick={changeToRed}>赤色に変更</button>
+     <button onClick={changeToBlack}>黒色に変更</button>
+     <button onClick={changeToThick}>太くする</button>
+     <button onClick={changeToThin}>細くする</button>
+     <button onClick={changeToEraser}>消しゴムに変更</button>
+     <canvas ref={canvasEl} width="1000" height="1000" />
+   </div>
+ );
+};
+
+export default App;
