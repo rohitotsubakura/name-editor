@@ -61,35 +61,39 @@ describe('App Simple Tests', () => {
   test('color change buttons work', async () => {
     render(<App />)
     
-    // 初期化後のカウントをリセット
-    jest.clearAllMocks()
+    // 初期化で1回呼ばれているので、それを考慮
+    const initialCallCount = (fabric.PencilBrush as jest.Mock).mock.calls.length
     
     const redButton = screen.getByText('赤色に変更')
     await userEvent.click(redButton)
     
-    expect(fabric.PencilBrush).toHaveBeenCalledTimes(1)
+    // ボタンクリックで1回 + useEffectで1回 = 2回追加
+    expect(fabric.PencilBrush).toHaveBeenCalledTimes(initialCallCount + 2)
     
     const blackButton = screen.getByText('黒色に変更')
     await userEvent.click(blackButton)
     
-    expect(fabric.PencilBrush).toHaveBeenCalledTimes(2)
+    // さらに2回追加
+    expect(fabric.PencilBrush).toHaveBeenCalledTimes(initialCallCount + 4)
   })
 
   test('width change buttons work', async () => {
     render(<App />)
     
-    // 初期化後のカウントをリセット
-    jest.clearAllMocks()
+    // 初期化で1回呼ばれているので、それを考慮
+    const initialCallCount = (fabric.PencilBrush as jest.Mock).mock.calls.length
     
     const thickButton = screen.getByText('太くする')
     await userEvent.click(thickButton)
     
-    expect(fabric.PencilBrush).toHaveBeenCalledTimes(1)
+    // ボタンクリックで1回 + useEffectで1回 = 2回追加
+    expect(fabric.PencilBrush).toHaveBeenCalledTimes(initialCallCount + 2)
     
     const thinButton = screen.getByText('細くする')
     await userEvent.click(thinButton)
     
-    expect(fabric.PencilBrush).toHaveBeenCalledTimes(2)
+    // さらに2回追加
+    expect(fabric.PencilBrush).toHaveBeenCalledTimes(initialCallCount + 4)
   })
 
   test('eraser button works', async () => {

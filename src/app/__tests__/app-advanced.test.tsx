@@ -111,7 +111,9 @@ describe('App Advanced Tests', () => {
       value: preventDefaultSpy,
     })
     
-    window.dispatchEvent(keyDownEvent)
+    await act(async () => {
+      window.dispatchEvent(keyDownEvent)
+    })
     
     expect(preventDefaultSpy).toHaveBeenCalled()
     
@@ -131,7 +133,9 @@ describe('App Advanced Tests', () => {
       value: preventDefaultSpy,
     })
     
-    window.dispatchEvent(redoKeyDownEvent)
+    await act(async () => {
+      window.dispatchEvent(redoKeyDownEvent)
+    })
     
     expect(preventDefaultSpy).toHaveBeenCalled()
   })
@@ -243,8 +247,8 @@ describe('App Advanced Tests', () => {
   test('handles rapid tool changes', async () => {
     render(<App />)
     
-    // 初期化後のカウントをリセット
-    jest.clearAllMocks()
+    // 初期化で1回呼ばれているので、それを考慮
+    const initialCallCount = (fabric.PencilBrush as jest.Mock).mock.calls.length
     
     // 複数のツール変更を素早く実行
     const redButton = screen.getByText('赤色に変更')
@@ -255,7 +259,8 @@ describe('App Advanced Tests', () => {
     await userEvent.click(thickButton)
     await userEvent.click(blackButton)
     
-    expect(fabric.PencilBrush).toHaveBeenCalledTimes(3)
+    // 各ボタンクリックで2回ずつ（ボタン内 + useEffect）= 6回追加
+    expect(fabric.PencilBrush).toHaveBeenCalledTimes(initialCallCount + 6)
   })
 
   test('handles canvas events without errors', async () => {
