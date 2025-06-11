@@ -1,0 +1,30 @@
+# .github/workflows/ci.yml
+name: CI (lint & test)
+
+on:
+  pull_request:       # PR が作成・更新・再オープンされたときだけ動く
+    branches: [main]  # ← ふつうは main を指定。別ブランチ名なら書き換える
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest  # GitHub が用意した Linux サーバーで動く
+    steps:
+      # 1. リポジトリをクローン
+      - uses: actions/checkout@v4
+
+      # 2. Node.js 20 をインストール＆npm キャッシュ
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20          # 好きなバージョンでOK
+          cache: 'npm'              # 依存関係をキャッシュして高速化
+
+      # 3. 依存パッケージをインストール
+      - run: npm ci
+
+      # 4. ESLint を実行
+      - name: Run ESLint
+        run: npm run lint
+
+      # 5. Jest ユニットテストを実行
+      - name: Run Jest tests
+        run: npm test -- --ci --runInBand
