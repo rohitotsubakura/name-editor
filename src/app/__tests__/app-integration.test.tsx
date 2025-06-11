@@ -35,7 +35,16 @@ describe('App Integration Tests', () => {
     }
 
     ;(fabric.Canvas as jest.Mock).mockReturnValue(mockCanvas)
-    ;(fabric.PencilBrush as jest.Mock).mockReturnValue(mockPencilBrush)
+    // PencilBrushのモックは、instanceofチェックが正しく動作するように設定
+    ;(fabric.PencilBrush as jest.Mock).mockImplementation(function(canvas) {
+      const instance = {
+        canvas,
+        color: '#000000',
+        width: 10,
+      }
+      Object.setPrototypeOf(instance, fabric.PencilBrush.prototype)
+      return instance
+    })
   })
 
   test('complete workflow: change color, draw, undo, redo', async () => {
@@ -71,19 +80,20 @@ describe('App Integration Tests', () => {
   test('brush properties are correctly set for different tools', async () => {
     render(<App />)
     
-    // 赤色ブラシ
-    const redButton = screen.getByText('赤色に変更')
-    await userEvent.click(redButton)
-    
+    // 初期化で1回PencilBrushが作成される
     let pencilBrushCall = (fabric.PencilBrush as jest.Mock).mock.calls[0]
     expect(pencilBrushCall[0]).toBe(mockCanvas)
     
-    // 太いブラシ
+    // 赤色ブラシ - 新しい実装では新しいPencilBrushは作成されない
+    const redButton = screen.getByText('赤色に変更')
+    await userEvent.click(redButton)
+    
+    // 太いブラシ - 新しい実装では新しいPencilBrushは作成されない
     const thickButton = screen.getByText('太くする')
     await userEvent.click(thickButton)
     
-    pencilBrushCall = (fabric.PencilBrush as jest.Mock).mock.calls[1]
-    expect(pencilBrushCall[0]).toBe(mockCanvas)
+    // PencilBrushは初期化時の1回のみ作成される
+    expect(fabric.PencilBrush).toHaveBeenCalledTimes(1)
     
     // 消しゴム
     ;(EraserBrush as jest.MockedFunction<typeof EraserBrush>).mockReturnValue(mockEraserBrush as ReturnType<typeof EraserBrush>)
@@ -92,6 +102,10 @@ describe('App Integration Tests', () => {
     await userEvent.click(eraserButton)
     
     expect(EraserBrush).toHaveBeenCalledWith(mockCanvas)
+    
+    // 消しゴムから戻る時は新しいPencilBrushが作成される
+    await userEvent.click(redButton)
+    expect(fabric.PencilBrush).toHaveBeenCalledTimes(2)
   })
 
   test('keyboard shortcuts work correctly', async () => {
@@ -195,8 +209,9 @@ describe('App Integration Tests', () => {
     await userEvent.click(blackButton)
     await userEvent.click(thinButton)
     
-    // 各ボタンクリックで2回ずつ（ボタン内 + useEffect）= 8回追加
-    expect(fabric.PencilBrush).toHaveBeenCalledTimes(initialCallCount + 8)
+    // 新しい実装では、色や太さの変更時に新しいPencilBrushは作成されない
+    // 初期化で1回のみ作成される
+    expect(fabric.PencilBrush).toHaveBeenCalledTimes(initialCallCount)
   })
 
   test('prevents default behavior for keyboard shortcuts', async () => {

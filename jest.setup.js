@@ -1,6 +1,13 @@
 import '@testing-library/jest-dom'
 
 // fabric.jsのモック
+const MockPencilBrush = jest.fn().mockImplementation(function(canvas) {
+  this.canvas = canvas
+  this.color = '#000000'
+  this.width = 10
+  return this
+})
+
 jest.mock('fabric', () => ({
   Canvas: jest.fn().mockImplementation(() => ({
     dispose: jest.fn(),
@@ -13,11 +20,7 @@ jest.mock('fabric', () => ({
       if (callback) callback()
     }),
   })),
-  PencilBrush: jest.fn().mockImplementation((canvas) => ({
-    canvas,
-    color: '#000000',
-    width: 10,
-  })),
+  PencilBrush: MockPencilBrush,
 }))
 
 // @erase2d/fabricのモック

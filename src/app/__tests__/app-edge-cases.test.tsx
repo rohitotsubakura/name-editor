@@ -24,9 +24,15 @@ describe('App Edge Cases', () => {
     }
 
     ;(fabric.Canvas as jest.Mock).mockReturnValue(mockCanvas)
-    ;(fabric.PencilBrush as jest.Mock).mockReturnValue({
-      color: '#000000',
-      width: 10,
+    // PencilBrushのモックは、instanceofチェックが正しく動作するように設定
+    ;(fabric.PencilBrush as jest.Mock).mockImplementation(function(canvas) {
+      const instance = {
+        canvas,
+        color: '#000000',
+        width: 10,
+      }
+      Object.setPrototypeOf(instance, fabric.PencilBrush.prototype)
+      return instance
     })
   })
 
@@ -210,6 +216,9 @@ describe('App Edge Cases', () => {
   test('handles simultaneous state changes', async () => {
     render(<App />)
     
+    // 初期化で呼ばれた回数を記録
+    const initialCallCount = (fabric.PencilBrush as jest.Mock).mock.calls.length
+    
     // 同時に複数の状態変更を実行
     const redButton = screen.getByText('赤色に変更')
     const thickButton = screen.getByText('太くする')
@@ -220,7 +229,8 @@ describe('App Edge Cases', () => {
       userEvent.click(thickButton),
     ])
     
-    // 初期化で1回 + 各ボタンクリックで2回ずつ = 5回以上呼ばれることを確認
-    expect((fabric.PencilBrush as jest.Mock).mock.calls.length).toBeGreaterThanOrEqual(5)
+    // 新しい実装では、色や太さの変更時に新しいPencilBrushは作成されない
+    // 初期化で作成された回数と同じであることを確認
+    expect((fabric.PencilBrush as jest.Mock).mock.calls.length).toBe(initialCallCount)
   })
 })
