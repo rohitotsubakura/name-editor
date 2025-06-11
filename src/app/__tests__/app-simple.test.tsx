@@ -11,12 +11,15 @@ describe('App Simple Tests', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     
+    // PencilBrushのモックインスタンスを作成
+    const mockPencilBrush = {
+      color: '#000000',
+      width: 10,
+    }
+    
     mockCanvas = {
       dispose: jest.fn(),
-      freeDrawingBrush: {
-        color: '#000000',
-        width: 10,
-      },
+      freeDrawingBrush: mockPencilBrush,
       isDrawingMode: false,
       on: jest.fn(),
       renderAll: jest.fn(),
@@ -27,10 +30,10 @@ describe('App Simple Tests', () => {
     }
 
     ;(fabric.Canvas as jest.Mock).mockReturnValue(mockCanvas)
-    ;(fabric.PencilBrush as jest.Mock).mockReturnValue({
-      color: '#000000',
-      width: 10,
-    })
+    ;(fabric.PencilBrush as jest.Mock).mockReturnValue(mockPencilBrush)
+    
+    // instanceof チェックが正しく動作するようにする
+    Object.setPrototypeOf(mockPencilBrush, fabric.PencilBrush.prototype)
   })
 
   test('renders all UI elements', () => {
@@ -61,20 +64,20 @@ describe('App Simple Tests', () => {
   test('color change buttons work', async () => {
     render(<App />)
     
-    // 初期化で1回呼ばれているので、それを考慮
+    // 初期化で呼ばれる回数を確認
     const initialCallCount = (fabric.PencilBrush as jest.Mock).mock.calls.length
     
     const redButton = screen.getByText('赤色に変更')
     await userEvent.click(redButton)
     
-    // ボタンクリックで1回 + useEffectで1回 = 2回追加
-    expect(fabric.PencilBrush).toHaveBeenCalledTimes(initialCallCount + 2)
+    // 色変更ボタンは既存のPencilBrushがある場合は新しいインスタンスを作成しない
+    expect(fabric.PencilBrush).toHaveBeenCalledTimes(initialCallCount)
     
     const blackButton = screen.getByText('黒色に変更')
     await userEvent.click(blackButton)
     
-    // さらに2回追加
-    expect(fabric.PencilBrush).toHaveBeenCalledTimes(initialCallCount + 4)
+    // 同様に新しいインスタンスは作成されない
+    expect(fabric.PencilBrush).toHaveBeenCalledTimes(initialCallCount)
   })
 
   test('width change buttons work', async () => {
@@ -86,14 +89,14 @@ describe('App Simple Tests', () => {
     const thickButton = screen.getByText('太くする')
     await userEvent.click(thickButton)
     
-    // ボタンクリックで1回 + useEffectで1回 = 2回追加
-    expect(fabric.PencilBrush).toHaveBeenCalledTimes(initialCallCount + 2)
+    // 太さ変更ボタンは既存のPencilBrushがある場合は新しいインスタンスを作成しない
+    expect(fabric.PencilBrush).toHaveBeenCalledTimes(initialCallCount)
     
     const thinButton = screen.getByText('細くする')
     await userEvent.click(thinButton)
     
-    // さらに2回追加
-    expect(fabric.PencilBrush).toHaveBeenCalledTimes(initialCallCount + 4)
+    // 同様に新しいインスタンスは作成されない
+    expect(fabric.PencilBrush).toHaveBeenCalledTimes(initialCallCount)
   })
 
   test('eraser button works', async () => {

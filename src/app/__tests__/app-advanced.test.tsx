@@ -11,12 +11,15 @@ describe('App Advanced Tests', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     
+    // PencilBrushのモックインスタンスを作成
+    const mockPencilBrush = {
+      color: '#000000',
+      width: 10,
+    }
+    
     mockCanvas = {
       dispose: jest.fn(),
-      freeDrawingBrush: {
-        color: '#000000',
-        width: 10,
-      },
+      freeDrawingBrush: mockPencilBrush,
       isDrawingMode: false,
       on: jest.fn(),
       renderAll: jest.fn(),
@@ -27,10 +30,10 @@ describe('App Advanced Tests', () => {
     }
 
     ;(fabric.Canvas as jest.Mock).mockReturnValue(mockCanvas)
-    ;(fabric.PencilBrush as jest.Mock).mockReturnValue({
-      color: '#000000',
-      width: 10,
-    })
+    ;(fabric.PencilBrush as jest.Mock).mockReturnValue(mockPencilBrush)
+    
+    // instanceof チェックが正しく動作するようにする
+    Object.setPrototypeOf(mockPencilBrush, fabric.PencilBrush.prototype)
   })
 
   test('undo/redo functionality with history', async () => {
@@ -191,15 +194,15 @@ describe('App Advanced Tests', () => {
     const redButton = screen.getByText('赤色に変更')
     await userEvent.click(redButton)
     
-    let pencilBrushCall = (fabric.PencilBrush as jest.Mock).mock.calls[0]
-    expect(pencilBrushCall[0]).toBe(mockCanvas)
+    // 色・太さ変更ボタンは既存のPencilBrushがある場合は新しいインスタンスを作成しない
+    expect(fabric.PencilBrush).not.toHaveBeenCalled()
     
     // 太いブラシに変更
     const thickButton = screen.getByText('太くする')
     await userEvent.click(thickButton)
     
-    pencilBrushCall = (fabric.PencilBrush as jest.Mock).mock.calls[1]
-    expect(pencilBrushCall[0]).toBe(mockCanvas)
+    // 同様に新しいインスタンスは作成されない
+    expect(fabric.PencilBrush).not.toHaveBeenCalled()
   })
 
   test('eraser functionality', async () => {
@@ -259,8 +262,8 @@ describe('App Advanced Tests', () => {
     await userEvent.click(thickButton)
     await userEvent.click(blackButton)
     
-    // 各ボタンクリックで2回ずつ（ボタン内 + useEffect）= 6回追加
-    expect(fabric.PencilBrush).toHaveBeenCalledTimes(initialCallCount + 6)
+    // 色・太さ変更ボタンは既存のPencilBrushがある場合は新しいインスタンスを作成しない
+    expect(fabric.PencilBrush).toHaveBeenCalledTimes(initialCallCount)
   })
 
   test('handles canvas events without errors', async () => {

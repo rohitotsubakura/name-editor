@@ -93,7 +93,15 @@ export const App = () => {
     } catch (error) {
       console.error('Error initializing canvas:', error);
     }
-  }, [color, width]);
+  }, []);
+
+  // ブラシの色と太さを更新する useEffect
+  useEffect(() => {
+    if (canvas && canvas.freeDrawingBrush && canvas.freeDrawingBrush instanceof fabric.PencilBrush) {
+      canvas.freeDrawingBrush.color = color;
+      canvas.freeDrawingBrush.width = width;
+    }
+  }, [canvas, color, width]);
 
   // refの値を同期
   useEffect(() => {
@@ -157,47 +165,55 @@ export const App = () => {
   }, [canvas, historyIndex, history, undo, redo]);
 
   const changeToRed = () => {
-   if (canvas?.freeDrawingBrush === undefined) {
+   if (!canvas) {
      return;
    }
-   canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
-   canvas.freeDrawingBrush.color = "#ff0000";
-   canvas.freeDrawingBrush.width = width;
+   // 消しゴムから切り替える場合は新しいPencilBrushを作成
+   if (!(canvas.freeDrawingBrush instanceof fabric.PencilBrush)) {
+     canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
+     canvas.freeDrawingBrush.width = width;
+   }
    setColor("#ff0000");
  };
 
  const changeToBlack = () => {
-   if (canvas?.freeDrawingBrush === undefined) {
+   if (!canvas) {
     return;
    }
-   canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
-   canvas.freeDrawingBrush.color = "#000000";
-   canvas.freeDrawingBrush.width = width;
+   // 消しゴムから切り替える場合は新しいPencilBrushを作成
+   if (!(canvas.freeDrawingBrush instanceof fabric.PencilBrush)) {
+     canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
+     canvas.freeDrawingBrush.width = width;
+   }
    setColor("#000000");
  };
 
  const changeToThick = () => {
-   if (canvas?.freeDrawingBrush === undefined) {
+   if (!canvas) {
      return;
    }
-   canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
-   canvas.freeDrawingBrush.width = 20;
-   canvas.freeDrawingBrush.color = color;
+   // 消しゴムから切り替える場合は新しいPencilBrushを作成
+   if (!(canvas.freeDrawingBrush instanceof fabric.PencilBrush)) {
+     canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
+     canvas.freeDrawingBrush.color = color;
+   }
    setWidth(20);
  };
 
  const changeToThin = () => {
-   if (canvas?.freeDrawingBrush === undefined) {
+   if (!canvas) {
      return;
    }
-   canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
-   canvas.freeDrawingBrush.width = 10;
-   canvas.freeDrawingBrush.color = color;
+   // 消しゴムから切り替える場合は新しいPencilBrushを作成
+   if (!(canvas.freeDrawingBrush instanceof fabric.PencilBrush)) {
+     canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
+     canvas.freeDrawingBrush.color = color;
+   }
    setWidth(10);
  };
 
  const changeToEraser = () => {
-  if (canvas?.freeDrawingBrush === undefined) {
+  if (!canvas) {
     return;
   }
   const eraser = new EraserBrush(canvas);
