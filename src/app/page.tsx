@@ -94,7 +94,40 @@ export const App = () => {
     });
 
     // 消しゴム使用完了時に履歴を保存
+    // 複数のイベントを監視して確実に履歴を保存
     canvas.on("erasing:end", () => {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Erasing end event fired');
+      }
+      setTimeout(saveState, 10);
+    });
+
+    // マウスアップ時に消しゴムの使用をチェック
+    let isErasingActive = false;
+    canvas.on("mouse:down", () => {
+      if (canvas.freeDrawingBrush instanceof EraserBrush) {
+        isErasingActive = true;
+        if (process.env.NODE_ENV === 'development') {
+          console.log('Eraser mouse down');
+        }
+      }
+    });
+
+    canvas.on("mouse:up", () => {
+      if (isErasingActive && canvas.freeDrawingBrush instanceof EraserBrush) {
+        isErasingActive = false;
+        if (process.env.NODE_ENV === 'development') {
+          console.log('Eraser mouse up - saving state');
+        }
+        setTimeout(saveState, 10);
+      }
+    });
+
+    // オブジェクトが変更された時（消しゴムで部分的に消された時）
+    canvas.on("object:modified", () => {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Object modified event fired');
+      }
       setTimeout(saveState, 10);
     });
 

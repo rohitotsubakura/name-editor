@@ -159,6 +159,43 @@ describe('App Integration Tests', () => {
     }, { timeout: 100 })
   })
 
+  test('eraser mouse events save history correctly', async () => {
+    ;(EraserBrush as jest.MockedFunction<typeof EraserBrush>).mockReturnValue(mockEraserBrush as ReturnType<typeof EraserBrush>)
+    
+    render(<App />)
+    
+    // 消しゴムに切り替え
+    const eraserButton = screen.getByText('消しゴムに変更')
+    await userEvent.click(eraserButton)
+    
+    // マウスダウンイベントをシミュレート
+    const mouseDownCallback = mockCanvas.on.mock.calls.find(
+      call => call[0] === 'mouse:down'
+    )?.[1]
+    
+    // マウスアップイベントをシミュレート
+    const mouseUpCallback = mockCanvas.on.mock.calls.find(
+      call => call[0] === 'mouse:up'
+    )?.[1]
+    
+    expect(mouseDownCallback).toBeDefined()
+    expect(mouseUpCallback).toBeDefined()
+    
+    // 消しゴムでマウスダウン
+    if (mouseDownCallback) {
+      mouseDownCallback()
+    }
+    
+    // 消しゴムでマウスアップ（履歴保存がトリガーされる）
+    if (mouseUpCallback) {
+      mouseUpCallback()
+    }
+    
+    await waitFor(() => {
+      expect(mockCanvas.toJSON).toHaveBeenCalled()
+    }, { timeout: 100 })
+  })
+
   test('object:added event sets erasable property', async () => {
     render(<App />)
     
