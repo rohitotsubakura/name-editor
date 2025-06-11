@@ -93,7 +93,7 @@ export const App = () => {
     } catch (error) {
       console.error('Error initializing canvas:', error);
     }
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ブラシの色と太さを更新する useEffect
   useEffect(() => {

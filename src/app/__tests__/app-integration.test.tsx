@@ -7,7 +7,6 @@ import { EraserBrush } from '@erase2d/fabric'
 // より詳細な統合テスト
 describe('App Integration Tests', () => {
   let mockCanvas: fabric.Canvas
-  let mockPencilBrush: fabric.PencilBrush
   let mockEraserBrush: typeof EraserBrush
 
   beforeEach(() => {
@@ -23,11 +22,6 @@ describe('App Integration Tests', () => {
       loadFromJSON: jest.fn((data, callback) => {
         if (callback) callback()
       }),
-    }
-
-    mockPencilBrush = {
-      color: '#000000',
-      width: 10,
     }
 
     mockEraserBrush = {
@@ -81,7 +75,7 @@ describe('App Integration Tests', () => {
     render(<App />)
     
     // 初期化で1回PencilBrushが作成される
-    let pencilBrushCall = (fabric.PencilBrush as jest.Mock).mock.calls[0]
+    const pencilBrushCall = (fabric.PencilBrush as jest.Mock).mock.calls[0]
     expect(pencilBrushCall[0]).toBe(mockCanvas)
     
     // 赤色ブラシ - 新しい実装では新しいPencilBrushは作成されない
