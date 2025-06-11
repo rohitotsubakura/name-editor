@@ -18,9 +18,9 @@ export const App = () => {
   // アンドゥ・リドゥ用の状態管理
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
-  const [isRedoing, setIsRedoing] = useState<boolean>(false);
+  const [isUpdatingHistory, setIsUpdatingHistory] = useState<boolean>(false);
+  const historyRef = useRef<string[]>([]);
   const historyIndexRef = useRef<number>(-1);
-  const isRedoingRef = useRef<boolean>(false);
 
   useEffect(() => {
     if (canvasEl.current === null) {
@@ -45,32 +45,47 @@ export const App = () => {
 
     // 初期状態を履歴に保存
     const initialState = JSON.stringify(canvas.toJSON());
-    setHistory([initialState]);
+    const initialHistory = [initialState];
+    setHistory(initialHistory);
     setHistoryIndex(0);
+    historyRef.current = initialHistory;
     historyIndexRef.current = 0;
 
     // 履歴に状態を保存する関数
     const saveState = () => {
-      if (isRedoingRef.current) return; // リドゥ中は履歴を保存しない
+      if (isUpdatingHistory) return; // 履歴更新中は保存しない
       
       const canvasState = JSON.stringify(canvas.toJSON());
-      setHistory(prev => {
-        const currentIndex = historyIndexRef.current;
-        const newHistory = prev.slice(0, currentIndex + 1); // 現在のインデックス以降を削除
-        newHistory.push(canvasState);
-        
-        // 履歴サイズ制限
-        if (newHistory.length > MAX_HISTORY_SIZE) {
-          newHistory.shift();
-          return newHistory;
-        }
-        
-        return newHistory;
-      });
+      const currentIndex = historyIndexRef.current;
+      const currentHistory = historyRef.current;
       
-      const newIndex = Math.min(historyIndexRef.current + 1, MAX_HISTORY_SIZE - 1);
-      setHistoryIndex(newIndex);
+      // 現在のインデックス以降を削除して新しい状態を追加
+      const newHistory = currentHistory.slice(0, currentIndex + 1);
+      newHistory.push(canvasState);
+      
+      // 履歴サイズ制限
+      let finalHistory = newHistory;
+      let newIndex = newHistory.length - 1;
+      
+      if (newHistory.length > MAX_HISTORY_SIZE) {
+        finalHistory = newHistory.slice(1); // 最初の要素を削除
+        newIndex = finalHistory.length - 1;
+      }
+      
+      // 状態を同期的に更新
+      historyRef.current = finalHistory;
       historyIndexRef.current = newIndex;
+      setHistory(finalHistory);
+      setHistoryIndex(newIndex);
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.log('State saved:', {
+          historyLength: finalHistory.length,
+          currentIndex: newIndex,
+          canUndo: newIndex > 0,
+          canRedo: newIndex < finalHistory.length - 1
+        });
+      }
     };
 
     // 描画完了時に履歴を保存
@@ -105,44 +120,66 @@ export const App = () => {
 
   // refの値を同期
   useEffect(() => {
+    historyRef.current = history;
+  }, [history]);
+
+  useEffect(() => {
     historyIndexRef.current = historyIndex;
   }, [historyIndex]);
 
-  useEffect(() => {
-    isRedoingRef.current = isRedoing;
-  }, [isRedoing]);
-
   // アンドゥ機能
   const undo = useCallback(() => {
-    if (!canvas || historyIndex <= 0) return;
+    if (!canvas || historyIndexRef.current <= 0) return;
     
-    const prevState = history[historyIndex - 1];
-    setIsRedoing(true);
+    const currentHistory = historyRef.current;
+    const newIndex = historyIndexRef.current - 1;
+    const prevState = currentHistory[newIndex];
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Undo:', {
+        currentIndex: historyIndexRef.current,
+        newIndex,
+        historyLength: currentHistory.length,
+        hasState: !!prevState
+      });
+    }
+    
+    setIsUpdatingHistory(true);
     
     canvas.loadFromJSON(prevState, () => {
       canvas.renderAll();
-      const newIndex = historyIndex - 1;
       setHistoryIndex(newIndex);
       historyIndexRef.current = newIndex;
-      setIsRedoing(false);
+      setIsUpdatingHistory(false);
     });
-  }, [canvas, historyIndex, history]);
+  }, [canvas]);
 
   // リドゥ機能
   const redo = useCallback(() => {
-    if (!canvas || historyIndex >= history.length - 1) return;
+    const currentHistory = historyRef.current;
+    if (!canvas || historyIndexRef.current >= currentHistory.length - 1) return;
     
-    const nextState = history[historyIndex + 1];
-    setIsRedoing(true);
+    const newIndex = historyIndexRef.current + 1;
+    const nextState = currentHistory[newIndex];
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Redo:', {
+        currentIndex: historyIndexRef.current,
+        newIndex,
+        historyLength: currentHistory.length,
+        hasState: !!nextState
+      });
+    }
+    
+    setIsUpdatingHistory(true);
     
     canvas.loadFromJSON(nextState, () => {
       canvas.renderAll();
-      const newIndex = historyIndex + 1;
       setHistoryIndex(newIndex);
       historyIndexRef.current = newIndex;
-      setIsRedoing(false);
+      setIsUpdatingHistory(false);
     });
-  }, [canvas, historyIndex, history]);
+  }, [canvas]);
 
   // キーボードショートカットの設定
   useEffect(() => {
@@ -162,7 +199,7 @@ export const App = () => {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [canvas, historyIndex, history, undo, redo]);
+  }, [undo, redo]);
 
   const changeToRed = () => {
    if (!canvas) {
@@ -230,6 +267,9 @@ export const App = () => {
        <button onClick={redo} disabled={historyIndex >= history.length - 1}>
          リドゥ (Ctrl+Y)
        </button>
+       <span style={{ marginLeft: '10px', fontSize: '12px', color: '#666' }}>
+         履歴: {historyIndex + 1}/{history.length}
+       </span>
      </div>
      <div style={{ marginBottom: '10px' }}>
        <button onClick={changeToRed}>赤色に変更</button>
