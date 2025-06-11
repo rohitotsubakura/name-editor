@@ -2,10 +2,11 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { App } from '../page'
 import * as fabric from 'fabric'
+import { EraserBrush } from '@erase2d/fabric'
 
 // 高度なテストケース
 describe('App Advanced Tests', () => {
-  let mockCanvas: any
+  let mockCanvas: fabric.Canvas
 
   beforeEach(() => {
     jest.clearAllMocks()
@@ -198,9 +199,8 @@ describe('App Advanced Tests', () => {
   })
 
   test('eraser functionality', async () => {
-    const { EraserBrush } = require('@erase2d/fabric')
     const mockEraserBrush = { width: 20 }
-    EraserBrush.mockReturnValue(mockEraserBrush)
+    ;(EraserBrush as jest.MockedFunction<typeof EraserBrush>).mockReturnValue(mockEraserBrush as ReturnType<typeof EraserBrush>)
     
     render(<App />)
     

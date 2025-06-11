@@ -2,12 +2,13 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { App } from '../page'
 import * as fabric from 'fabric'
+import { EraserBrush } from '@erase2d/fabric'
 
 // より詳細な統合テスト
 describe('App Integration Tests', () => {
-  let mockCanvas: any
-  let mockPencilBrush: any
-  let mockEraserBrush: any
+  let mockCanvas: fabric.Canvas
+  let mockPencilBrush: fabric.PencilBrush
+  let mockEraserBrush: typeof EraserBrush
 
   beforeEach(() => {
     jest.clearAllMocks()
@@ -85,8 +86,7 @@ describe('App Integration Tests', () => {
     expect(pencilBrushCall[0]).toBe(mockCanvas)
     
     // 消しゴム
-    const { EraserBrush } = require('@erase2d/fabric')
-    EraserBrush.mockReturnValue(mockEraserBrush)
+    ;(EraserBrush as jest.MockedFunction<typeof EraserBrush>).mockReturnValue(mockEraserBrush as ReturnType<typeof EraserBrush>)
     
     const eraserButton = screen.getByText('消しゴムに変更')
     await userEvent.click(eraserButton)
@@ -128,8 +128,7 @@ describe('App Integration Tests', () => {
   })
 
   test('eraser functionality works correctly', async () => {
-    const { EraserBrush } = require('@erase2d/fabric')
-    EraserBrush.mockReturnValue(mockEraserBrush)
+    ;(EraserBrush as jest.MockedFunction<typeof EraserBrush>).mockReturnValue(mockEraserBrush as ReturnType<typeof EraserBrush>)
     
     render(<App />)
     

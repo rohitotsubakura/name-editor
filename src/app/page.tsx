@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import * as fabric from "fabric";
 import { EraserBrush } from "@erase2d/fabric";
 
@@ -93,7 +93,7 @@ export const App = () => {
     } catch (error) {
       console.error('Error initializing canvas:', error);
     }
-  }, []);
+  }, [color, width]);
 
   // refの値を同期
   useEffect(() => {
@@ -105,7 +105,7 @@ export const App = () => {
   }, [isRedoing]);
 
   // アンドゥ機能
-  const undo = () => {
+  const undo = useCallback(() => {
     if (!canvas || historyIndex <= 0) return;
     
     const prevState = history[historyIndex - 1];
@@ -118,10 +118,10 @@ export const App = () => {
       historyIndexRef.current = newIndex;
       setIsRedoing(false);
     });
-  };
+  }, [canvas, historyIndex, history]);
 
   // リドゥ機能
-  const redo = () => {
+  const redo = useCallback(() => {
     if (!canvas || historyIndex >= history.length - 1) return;
     
     const nextState = history[historyIndex + 1];
@@ -134,7 +134,7 @@ export const App = () => {
       historyIndexRef.current = newIndex;
       setIsRedoing(false);
     });
-  };
+  }, [canvas, historyIndex, history]);
 
   // キーボードショートカットの設定
   useEffect(() => {
@@ -154,7 +154,7 @@ export const App = () => {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [canvas, historyIndex, history]);
+  }, [canvas, historyIndex, history, undo, redo]);
 
   const changeToRed = () => {
    if (canvas?.freeDrawingBrush === undefined) {

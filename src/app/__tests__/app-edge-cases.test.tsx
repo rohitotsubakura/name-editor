@@ -6,7 +6,7 @@ import * as fabric from 'fabric'
 
 // エッジケースのテスト
 describe('App Edge Cases', () => {
-  let mockCanvas: any
+  let mockCanvas: fabric.Canvas
 
   beforeEach(() => {
     jest.clearAllMocks()
@@ -176,7 +176,7 @@ describe('App Edge Cases', () => {
         // コールバック内でエラーが発生
         try {
           callback()
-        } catch (error) {
+        } catch {
           // エラーを無視
         }
       }

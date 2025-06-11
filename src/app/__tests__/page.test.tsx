@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { App } from '../page'
 import * as fabric from 'fabric'
+import { EraserBrush } from '@erase2d/fabric'
 
 // fabric.jsのモックを取得
 const mockCanvas = {
@@ -101,8 +102,7 @@ describe('App Component', () => {
   })
 
   test('switches to eraser when eraser button is clicked', async () => {
-    const { EraserBrush } = require('@erase2d/fabric')
-    EraserBrush.mockReturnValue(mockEraserBrush)
+    ;(EraserBrush as jest.MockedFunction<typeof EraserBrush>).mockReturnValue(mockEraserBrush as ReturnType<typeof EraserBrush>)
     
     render(<App />)
     

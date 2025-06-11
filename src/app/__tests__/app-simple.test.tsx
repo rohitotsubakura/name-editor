@@ -2,10 +2,11 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { App } from '../page'
 import * as fabric from 'fabric'
+import { EraserBrush } from '@erase2d/fabric'
 
 // シンプルなテストケース
 describe('App Simple Tests', () => {
-  let mockCanvas: any
+  let mockCanvas: fabric.Canvas
 
   beforeEach(() => {
     jest.clearAllMocks()
@@ -92,8 +93,7 @@ describe('App Simple Tests', () => {
   })
 
   test('eraser button works', async () => {
-    const { EraserBrush } = require('@erase2d/fabric')
-    EraserBrush.mockReturnValue({ width: 20 })
+    (EraserBrush as jest.MockedFunction<typeof EraserBrush>).mockReturnValue({ width: 20 } as ReturnType<typeof EraserBrush>)
     
     render(<App />)
     
