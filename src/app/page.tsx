@@ -26,8 +26,10 @@ export const App = () => {
     if (canvasEl.current === null) {
       return;
     }
-    const canvas = new fabric.Canvas(canvasEl.current);
-    setCanvas(canvas);
+    
+    try {
+      const canvas = new fabric.Canvas(canvasEl.current);
+      setCanvas(canvas);
 
     // 手書き機能
     const pen = new fabric.PencilBrush(canvas);
@@ -81,9 +83,16 @@ export const App = () => {
       setTimeout(saveState, 10);
     });
 
-    return () => {
-      canvas.dispose();
-    };
+      return () => {
+        try {
+          canvas.dispose();
+        } catch (error) {
+          console.error('Error disposing canvas:', error);
+        }
+      };
+    } catch (error) {
+      console.error('Error initializing canvas:', error);
+    }
   }, []);
 
   // refの値を同期
