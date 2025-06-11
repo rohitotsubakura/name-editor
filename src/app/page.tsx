@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import * as fabric from "fabric";
 import { EraserBrush } from "@erase2d/fabric";
 
@@ -26,8 +26,10 @@ export const App = () => {
     if (canvasEl.current === null) {
       return;
     }
-    const canvas = new fabric.Canvas(canvasEl.current);
-    setCanvas(canvas);
+    
+    try {
+      const canvas = new fabric.Canvas(canvasEl.current);
+      setCanvas(canvas);
 
     // 手書き機能
     const pen = new fabric.PencilBrush(canvas);
@@ -81,10 +83,25 @@ export const App = () => {
       setTimeout(saveState, 10);
     });
 
-    return () => {
-      canvas.dispose();
-    };
-  }, []);
+      return () => {
+        try {
+          canvas.dispose();
+        } catch (error) {
+          console.error('Error disposing canvas:', error);
+        }
+      };
+    } catch (error) {
+      console.error('Error initializing canvas:', error);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ブラシの色と太さを更新する useEffect
+  useEffect(() => {
+    if (canvas && canvas.freeDrawingBrush && canvas.freeDrawingBrush instanceof fabric.PencilBrush) {
+      canvas.freeDrawingBrush.color = color;
+      canvas.freeDrawingBrush.width = width;
+    }
+  }, [canvas, color, width]);
 
   // refの値を同期
   useEffect(() => {
@@ -96,7 +113,7 @@ export const App = () => {
   }, [isRedoing]);
 
   // アンドゥ機能
-  const undo = () => {
+  const undo = useCallback(() => {
     if (!canvas || historyIndex <= 0) return;
     
     const prevState = history[historyIndex - 1];
@@ -109,10 +126,10 @@ export const App = () => {
       historyIndexRef.current = newIndex;
       setIsRedoing(false);
     });
-  };
+  }, [canvas, historyIndex, history]);
 
   // リドゥ機能
-  const redo = () => {
+  const redo = useCallback(() => {
     if (!canvas || historyIndex >= history.length - 1) return;
     
     const nextState = history[historyIndex + 1];
@@ -125,7 +142,7 @@ export const App = () => {
       historyIndexRef.current = newIndex;
       setIsRedoing(false);
     });
-  };
+  }, [canvas, historyIndex, history]);
 
   // キーボードショートカットの設定
   useEffect(() => {
@@ -145,50 +162,58 @@ export const App = () => {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [canvas, historyIndex, history]);
+  }, [canvas, historyIndex, history, undo, redo]);
 
   const changeToRed = () => {
-   if (canvas?.freeDrawingBrush === undefined) {
+   if (!canvas) {
      return;
    }
-   canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
-   canvas.freeDrawingBrush.color = "#ff0000";
-   canvas.freeDrawingBrush.width = width;
+   // 消しゴムから切り替える場合は新しいPencilBrushを作成
+   if (!(canvas.freeDrawingBrush instanceof fabric.PencilBrush)) {
+     canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
+     canvas.freeDrawingBrush.width = width;
+   }
    setColor("#ff0000");
  };
 
  const changeToBlack = () => {
-   if (canvas?.freeDrawingBrush === undefined) {
+   if (!canvas) {
     return;
    }
-   canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
-   canvas.freeDrawingBrush.color = "#000000";
-   canvas.freeDrawingBrush.width = width;
+   // 消しゴムから切り替える場合は新しいPencilBrushを作成
+   if (!(canvas.freeDrawingBrush instanceof fabric.PencilBrush)) {
+     canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
+     canvas.freeDrawingBrush.width = width;
+   }
    setColor("#000000");
  };
 
  const changeToThick = () => {
-   if (canvas?.freeDrawingBrush === undefined) {
+   if (!canvas) {
      return;
    }
-   canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
-   canvas.freeDrawingBrush.width = 20;
-   canvas.freeDrawingBrush.color = color;
+   // 消しゴムから切り替える場合は新しいPencilBrushを作成
+   if (!(canvas.freeDrawingBrush instanceof fabric.PencilBrush)) {
+     canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
+     canvas.freeDrawingBrush.color = color;
+   }
    setWidth(20);
  };
 
  const changeToThin = () => {
-   if (canvas?.freeDrawingBrush === undefined) {
+   if (!canvas) {
      return;
    }
-   canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
-   canvas.freeDrawingBrush.width = 10;
-   canvas.freeDrawingBrush.color = color;
+   // 消しゴムから切り替える場合は新しいPencilBrushを作成
+   if (!(canvas.freeDrawingBrush instanceof fabric.PencilBrush)) {
+     canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
+     canvas.freeDrawingBrush.color = color;
+   }
    setWidth(10);
  };
 
  const changeToEraser = () => {
-  if (canvas?.freeDrawingBrush === undefined) {
+  if (!canvas) {
     return;
   }
   const eraser = new EraserBrush(canvas);
