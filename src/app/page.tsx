@@ -80,13 +80,6 @@ export const App = () => {
         newIndex = 0;
       }
       
-      // デバッグ情報
-      const debugInfo = {
-        beforeIndex: currentIndex,
-        afterIndex: newIndex,
-        historyLength: finalHistory.length,
-        newHistoryLength: newHistory.length
-      };
       
       // 状態を同期的に更新
       historyRef.current = finalHistory;
@@ -144,13 +137,13 @@ export const App = () => {
 
     // マウスイベントでの消しゴム監視
     let eraserMouseDown = false;
-    canvas.on("mouse:down", (e) => {
+    canvas.on("mouse:down", () => {
       if (canvas.freeDrawingBrush instanceof EraserBrush) {
         eraserMouseDown = true;
       }
     });
 
-    canvas.on("mouse:up", (e) => {
+    canvas.on("mouse:up", () => {
       if (canvas.freeDrawingBrush instanceof EraserBrush && eraserMouseDown) {
         setTimeout(() => {
           saveState();
@@ -161,10 +154,10 @@ export const App = () => {
       return () => {
         try {
           canvas.dispose();
-        } catch (error) {
+        } catch {
         }
       };
-    } catch (error) {
+    } catch {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -187,14 +180,6 @@ export const App = () => {
 
   // アンドゥ機能
   const undo = useCallback(async () => {
-    const debugInfo = {
-      hasCanvas: !!canvas,
-      currentIndex: historyIndexRef.current,
-      stateIndex: historyIndex,
-      historyLength: historyRef.current.length,
-      condition: historyIndexRef.current <= 0
-    };
-    
     if (!canvas) {
       return;
     }
@@ -230,7 +215,7 @@ export const App = () => {
       setHistoryIndex(newIndex);
       historyIndexRef.current = newIndex;
       setIsUpdatingHistory(false);
-    } catch (error) {
+    } catch {
       setIsUpdatingHistory(false);
     }
   }, [canvas]);
@@ -257,7 +242,7 @@ export const App = () => {
       setHistoryIndex(newIndex);
       historyIndexRef.current = newIndex;
       setIsUpdatingHistory(false);
-    } catch (error) {
+    } catch {
       setIsUpdatingHistory(false);
     }
   }, [canvas]);

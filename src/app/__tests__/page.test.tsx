@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
+import { render, screen, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { App } from '../page'
 import * as fabric from 'fabric'
@@ -13,11 +13,6 @@ const mockCanvas = {
   renderAll: jest.fn(),
   toJSON: jest.fn(() => ({})),
   loadFromJSON: jest.fn(() => Promise.resolve()),
-}
-
-const mockPencilBrush = {
-  color: '#000000',
-  width: 10,
 }
 
 const mockEraserBrush = {
