@@ -18,9 +18,9 @@ export const App = () => {
   // アンドゥ・リドゥ用の状態管理
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
-  const [isRedoing, setIsRedoing] = useState<boolean>(false);
+  const [isUpdatingHistory, setIsUpdatingHistory] = useState<boolean>(false);
+  const historyRef = useRef<string[]>([]);
   const historyIndexRef = useRef<number>(-1);
-  const isRedoingRef = useRef<boolean>(false);
 
   useEffect(() => {
     if (canvasEl.current === null) {
@@ -45,32 +45,48 @@ export const App = () => {
 
     // 初期状態を履歴に保存
     const initialState = JSON.stringify(canvas.toJSON());
-    setHistory([initialState]);
+    const initialHistory = [initialState];
+    setHistory(initialHistory);
     setHistoryIndex(0);
+    historyRef.current = initialHistory;
     historyIndexRef.current = 0;
 
     // 履歴に状態を保存する関数
     const saveState = () => {
-      if (isRedoingRef.current) return; // リドゥ中は履歴を保存しない
+      if (isUpdatingHistory) return; // 履歴更新中は保存しない
       
       const canvasState = JSON.stringify(canvas.toJSON());
-      setHistory(prev => {
-        const currentIndex = historyIndexRef.current;
-        const newHistory = prev.slice(0, currentIndex + 1); // 現在のインデックス以降を削除
-        newHistory.push(canvasState);
-        
-        // 履歴サイズ制限
-        if (newHistory.length > MAX_HISTORY_SIZE) {
-          newHistory.shift();
-          return newHistory;
-        }
-        
-        return newHistory;
-      });
+      const currentIndex = historyIndexRef.current;
+      const currentHistory = historyRef.current;
       
-      const newIndex = Math.min(historyIndexRef.current + 1, MAX_HISTORY_SIZE - 1);
-      setHistoryIndex(newIndex);
+      // 現在のインデックス以降を削除して新しい状態を追加
+      const newHistory = currentHistory.slice(0, currentIndex + 1);
+      newHistory.push(canvasState);
+      
+      // 履歴サイズ制限
+      let finalHistory = newHistory;
+      let newIndex = newHistory.length - 1;
+      
+      if (newHistory.length > MAX_HISTORY_SIZE) {
+        finalHistory = newHistory.slice(1); // 最初の要素を削除
+        newIndex = finalHistory.length - 1;
+      }
+      
+      // インデックスが配列の範囲内であることを確認
+      if (newIndex >= finalHistory.length) {
+        newIndex = finalHistory.length - 1;
+      }
+      if (newIndex < 0) {
+        newIndex = 0;
+      }
+      
+      
+      // 状態を同期的に更新
+      historyRef.current = finalHistory;
       historyIndexRef.current = newIndex;
+      setHistory(finalHistory);
+      setHistoryIndex(newIndex);
+      
     };
 
     // 描画完了時に履歴を保存
@@ -79,19 +95,69 @@ export const App = () => {
     });
 
     // 消しゴム使用完了時に履歴を保存
+    // 重複保存を防ぐためのフラグ
+    let eraserSaveTimeout: NodeJS.Timeout | null = null;
+    
+    const saveStateAfterErasing = () => {
+      // 既存のタイムアウトをクリア
+      if (eraserSaveTimeout) {
+        clearTimeout(eraserSaveTimeout);
+      }
+      // 新しいタイムアウトを設定
+      eraserSaveTimeout = setTimeout(() => {
+        saveState();
+        eraserSaveTimeout = null;
+      }, 50); // 少し長めの遅延で重複を防ぐ
+    };
+
+    // 消しゴムの主要イベントのみ監視
     canvas.on("erasing:end", () => {
-      setTimeout(saveState, 10);
+      saveStateAfterErasing();
+    });
+
+    // オブジェクトが変更された時（消しゴムで部分的に消された時）
+    canvas.on("object:modified", () => {
+      if (isUpdatingHistory) return;
+      if (canvas.freeDrawingBrush instanceof EraserBrush) {
+        saveStateAfterErasing();
+      }
+    });
+
+    // 消しゴムの詳細なイベント監視
+    canvas.on("erasing:start", () => {
+    });
+
+    // オブジェクトが削除された時
+    canvas.on("object:removed", () => {
+      if (isUpdatingHistory) return;
+      if (canvas.freeDrawingBrush instanceof EraserBrush) {
+        saveStateAfterErasing();
+      }
+    });
+
+    // マウスイベントでの消しゴム監視
+    let eraserMouseDown = false;
+    canvas.on("mouse:down", () => {
+      if (canvas.freeDrawingBrush instanceof EraserBrush) {
+        eraserMouseDown = true;
+      }
+    });
+
+    canvas.on("mouse:up", () => {
+      if (canvas.freeDrawingBrush instanceof EraserBrush && eraserMouseDown) {
+        setTimeout(() => {
+          saveState();
+        }, 100);
+      }
     });
 
       return () => {
         try {
           canvas.dispose();
-        } catch (error) {
-          console.error('Error disposing canvas:', error);
+        } catch {
         }
       };
-    } catch (error) {
-      console.error('Error initializing canvas:', error);
+    } catch {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -105,44 +171,81 @@ export const App = () => {
 
   // refの値を同期
   useEffect(() => {
+    historyRef.current = history;
+  }, [history]);
+
+  useEffect(() => {
     historyIndexRef.current = historyIndex;
   }, [historyIndex]);
 
-  useEffect(() => {
-    isRedoingRef.current = isRedoing;
-  }, [isRedoing]);
-
   // アンドゥ機能
-  const undo = useCallback(() => {
-    if (!canvas || historyIndex <= 0) return;
+  const undo = useCallback(async () => {
+    if (!canvas) {
+      return;
+    }
     
-    const prevState = history[historyIndex - 1];
-    setIsRedoing(true);
+    if (historyIndexRef.current <= 0) {
+      return;
+    }
     
-    canvas.loadFromJSON(prevState, () => {
+    if (historyIndexRef.current >= historyRef.current.length) {
+      historyIndexRef.current = historyRef.current.length - 1;
+      setHistoryIndex(historyRef.current.length - 1);
+    }
+    
+    if (historyIndexRef.current <= 0) {
+      return;
+    }
+    
+    const currentHistory = historyRef.current;
+    const newIndex = historyIndexRef.current - 1;
+    const prevState = currentHistory[newIndex];
+    
+    setIsUpdatingHistory(true);
+    
+    try {
+      if (!prevState) {
+        setIsUpdatingHistory(false);
+        return;
+      }
+      canvas.clear();
+      await canvas.loadFromJSON(prevState);
       canvas.renderAll();
-      const newIndex = historyIndex - 1;
+      canvas.isDrawingMode = true;
       setHistoryIndex(newIndex);
       historyIndexRef.current = newIndex;
-      setIsRedoing(false);
-    });
-  }, [canvas, historyIndex, history]);
+      setIsUpdatingHistory(false);
+    } catch {
+      setIsUpdatingHistory(false);
+    }
+  }, [canvas]);
 
   // リドゥ機能
-  const redo = useCallback(() => {
-    if (!canvas || historyIndex >= history.length - 1) return;
-    
-    const nextState = history[historyIndex + 1];
-    setIsRedoing(true);
-    
-    canvas.loadFromJSON(nextState, () => {
+  const redo = useCallback(async () => {
+    const currentHistory = historyRef.current;
+    if (!canvas || historyIndexRef.current >= currentHistory.length - 1) return;
+
+    const newIndex = historyIndexRef.current + 1;
+    const nextState = currentHistory[newIndex];
+
+    setIsUpdatingHistory(true);
+
+    try {
+      if (!nextState) {
+        setIsUpdatingHistory(false);
+        return;
+      }
+      canvas.clear();
+      await canvas.loadFromJSON(nextState);
       canvas.renderAll();
-      const newIndex = historyIndex + 1;
+      canvas.isDrawingMode = true;
       setHistoryIndex(newIndex);
       historyIndexRef.current = newIndex;
-      setIsRedoing(false);
-    });
-  }, [canvas, historyIndex, history]);
+      setIsUpdatingHistory(false);
+    } catch {
+      setIsUpdatingHistory(false);
+    }
+  }, [canvas]);
 
   // キーボードショートカットの設定
   useEffect(() => {
@@ -162,85 +265,79 @@ export const App = () => {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [canvas, historyIndex, history, undo, redo]);
+  }, [undo, redo]);
 
   const changeToRed = () => {
-   if (!canvas) {
-     return;
-   }
-   // 消しゴムから切り替える場合は新しいPencilBrushを作成
-   if (!(canvas.freeDrawingBrush instanceof fabric.PencilBrush)) {
-     canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
-     canvas.freeDrawingBrush.width = width;
-   }
-   setColor("#ff0000");
- };
+    if (!canvas || isUpdatingHistory) return;
+    const pen = new fabric.PencilBrush(canvas);
+    pen.color = "#ff0000";
+    pen.width = width;
+    canvas.freeDrawingBrush = pen;
+    canvas.isDrawingMode = true;
+    setColor("#ff0000");
+  };
 
- const changeToBlack = () => {
-   if (!canvas) {
-    return;
-   }
-   // 消しゴムから切り替える場合は新しいPencilBrushを作成
-   if (!(canvas.freeDrawingBrush instanceof fabric.PencilBrush)) {
-     canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
-     canvas.freeDrawingBrush.width = width;
-   }
-   setColor("#000000");
- };
+  const changeToBlack = () => {
+    if (!canvas || isUpdatingHistory) return;
+    const pen = new fabric.PencilBrush(canvas);
+    pen.color = "#000000";
+    pen.width = width;
+    canvas.freeDrawingBrush = pen;
+    canvas.isDrawingMode = true;
+    setColor("#000000");
+  };
 
- const changeToThick = () => {
-   if (!canvas) {
-     return;
-   }
-   // 消しゴムから切り替える場合は新しいPencilBrushを作成
-   if (!(canvas.freeDrawingBrush instanceof fabric.PencilBrush)) {
-     canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
-     canvas.freeDrawingBrush.color = color;
-   }
-   setWidth(20);
- };
+  const changeToThick = () => {
+    if (!canvas || isUpdatingHistory) return;
+    const pen = new fabric.PencilBrush(canvas);
+    pen.color = color;
+    pen.width = 20;
+    canvas.freeDrawingBrush = pen;
+    canvas.isDrawingMode = true;
+    setWidth(20);
+  };
 
- const changeToThin = () => {
-   if (!canvas) {
-     return;
-   }
-   // 消しゴムから切り替える場合は新しいPencilBrushを作成
-   if (!(canvas.freeDrawingBrush instanceof fabric.PencilBrush)) {
-     canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
-     canvas.freeDrawingBrush.color = color;
-   }
-   setWidth(10);
- };
+  const changeToThin = () => {
+    if (!canvas || isUpdatingHistory) return;
+    const pen = new fabric.PencilBrush(canvas);
+    pen.color = color;
+    pen.width = 10;
+    canvas.freeDrawingBrush = pen;
+    canvas.isDrawingMode = true;
+    setWidth(10);
+  };
 
- const changeToEraser = () => {
-  if (!canvas) {
-    return;
-  }
-  const eraser = new EraserBrush(canvas);
-  canvas.freeDrawingBrush = eraser;
-  canvas.freeDrawingBrush.width = 20;
- };
+  const changeToEraser = () => {
+    if (!canvas || isUpdatingHistory) return;
+    const eraser = new EraserBrush(canvas);
+    canvas.freeDrawingBrush = eraser;
+    canvas.freeDrawingBrush.width = 20;
+    canvas.isDrawingMode = true;
+  };
 
- return (
-   <div>
-     <div style={{ marginBottom: '10px' }}>
-       <button onClick={undo} disabled={historyIndex <= 0}>
-         アンドゥ (Ctrl+Z)
-       </button>
-       <button onClick={redo} disabled={historyIndex >= history.length - 1}>
-         リドゥ (Ctrl+Y)
-       </button>
-     </div>
-     <div style={{ marginBottom: '10px' }}>
-       <button onClick={changeToRed}>赤色に変更</button>
-       <button onClick={changeToBlack}>黒色に変更</button>
-       <button onClick={changeToThick}>太くする</button>
-       <button onClick={changeToThin}>細くする</button>
-       <button onClick={changeToEraser}>消しゴムに変更</button>
-     </div>
-     <canvas ref={canvasEl} width="1000" height="1000" />
-   </div>
- );
+  return (
+    <div>
+      <div style={{ marginBottom: '10px' }}>
+        <button onClick={undo} disabled={historyIndex <= 0}>
+          アンドゥ (Ctrl+Z)
+        </button>
+        <button onClick={redo} disabled={historyIndex >= history.length - 1}>
+          リドゥ (Ctrl+Y)
+        </button>
+        <span style={{ marginLeft: '10px', fontSize: '12px', color: '#666' }}>
+          履歴: {historyIndex + 1}/{history.length}
+        </span>
+      </div>
+      <div style={{ marginBottom: '10px' }}>
+        <button onClick={changeToRed}>赤色に変更</button>
+        <button onClick={changeToBlack}>黒色に変更</button>
+        <button onClick={changeToThick}>太くする</button>
+        <button onClick={changeToThin}>細くする</button>
+        <button onClick={changeToEraser}>消しゴムに変更</button>
+      </div>
+      <canvas ref={canvasEl} width="1000" height="1000" />
+    </div>
+  );
 };
 
 export default App;

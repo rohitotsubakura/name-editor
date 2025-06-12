@@ -1,5 +1,5 @@
 import React from 'react'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { App } from '../page'
 import * as fabric from 'fabric'
@@ -81,18 +81,23 @@ describe('App Edge Cases', () => {
   test('handles rapid undo/redo operations', async () => {
     render(<App />)
     
+    // clearとloadFromJSONのモックを設定
+    mockCanvas.clear = jest.fn()
+    
     // 複数の状態を作成
     const pathCreatedCallback = mockCanvas.on.mock.calls.find(
       call => call[0] === 'path:created'
     )?.[1]
-    
     if (pathCreatedCallback) {
       // 複数回描画をシミュレート
-      pathCreatedCallback()
-      await new Promise(resolve => setTimeout(resolve, 20))
-      pathCreatedCallback()
-      await new Promise(resolve => setTimeout(resolve, 20))
-      pathCreatedCallback()
+      await act(async () => {
+        pathCreatedCallback()
+        await new Promise(resolve => setTimeout(resolve, 20))
+        pathCreatedCallback()
+        await new Promise(resolve => setTimeout(resolve, 20))
+        pathCreatedCallback()
+        await new Promise(resolve => setTimeout(resolve, 20))
+      })
     }
     
     await waitFor(() => {
@@ -104,13 +109,18 @@ describe('App Edge Cases', () => {
     const undoButton = screen.getByText('アンドゥ (Ctrl+Z)')
     const redoButton = screen.getByText('リドゥ (Ctrl+Y)')
     
-    await userEvent.click(undoButton)
-    await userEvent.click(undoButton)
-    await userEvent.click(redoButton)
-    await userEvent.click(redoButton)
+    await act(async () => {
+      await userEvent.click(undoButton)
+      await userEvent.click(undoButton)
+      await userEvent.click(redoButton)
+      await userEvent.click(redoButton)
+    })
     
-    // loadFromJSONが適切に呼ばれることを確認
-    expect(mockCanvas.loadFromJSON).toHaveBeenCalled()
+    // clearとloadFromJSONが4回呼ばれていることを検証
+    await waitFor(() => {
+      expect(mockCanvas.clear).toHaveBeenCalledTimes(4)
+      expect(mockCanvas.loadFromJSON).toHaveBeenCalledTimes(4)
+    })
   })
 
   test('handles history size limit', async () => {
@@ -122,10 +132,12 @@ describe('App Edge Cases', () => {
     
     if (pathCreatedCallback) {
       // MAX_HISTORY_SIZE (50) を超える数の操作をシミュレート
-      for (let i = 0; i < 55; i++) {
-        pathCreatedCallback()
-        await new Promise(resolve => setTimeout(resolve, 1))
-      }
+      await act(async () => {
+        for (let i = 0; i < 55; i++) {
+          pathCreatedCallback()
+          await new Promise(resolve => setTimeout(resolve, 1))
+        }
+      })
     }
     
     // 履歴が制限されることを確認（具体的な検証は実装に依存）
@@ -199,7 +211,12 @@ describe('App Edge Cases', () => {
     )?.[1]
     
     if (pathCreatedCallback) {
-      pathCreatedCallback()
+      await act(async () => {
+        pathCreatedCallback()
+        await new Promise(resolve => setTimeout(resolve, 20))
+        pathCreatedCallback()
+        await new Promise(resolve => setTimeout(resolve, 20))
+      })
     }
     
     await waitFor(() => {
@@ -210,27 +227,24 @@ describe('App Edge Cases', () => {
     const undoButton = screen.getByText('アンドゥ (Ctrl+Z)')
     
     // エラーが発生してもアプリがクラッシュしないことを確認
-    expect(() => userEvent.click(undoButton)).not.toThrow()
+    await act(async () => {
+      expect(() => userEvent.click(undoButton)).not.toThrow()
+    })
   })
 
   test('handles simultaneous state changes', async () => {
     render(<App />)
-    
     // 初期化で呼ばれた回数を記録
     const initialCallCount = (fabric.PencilBrush as jest.Mock).mock.calls.length
-    
     // 同時に複数の状態変更を実行
     const redButton = screen.getByText('赤色に変更')
     const thickButton = screen.getByText('太くする')
-    
     // 同時クリック
     await Promise.all([
       userEvent.click(redButton),
       userEvent.click(thickButton),
     ])
-    
-    // 新しい実装では、色や太さの変更時に新しいPencilBrushは作成されない
-    // 初期化で作成された回数と同じであることを確認
-    expect((fabric.PencilBrush as jest.Mock).mock.calls.length).toBe(initialCallCount)
+    // 2回分新しいPencilBrushが作成されていることを検証
+    expect((fabric.PencilBrush as jest.Mock).mock.calls.length).toBe(initialCallCount + 2)
   })
 })

@@ -39,25 +39,24 @@ describe('App Advanced Tests', () => {
   test('undo/redo functionality with history', async () => {
     render(<App />)
     
-    // 描画をシミュレートして履歴を作成
+    // 最初にcanvas.clearとrenderAllのモックをリセット
+    mockCanvas.clear = jest.fn()
+    
+    // 履歴を複数作成するため、path:createdイベントを複数回発火
     const pathCreatedCallback = mockCanvas.on.mock.calls.find(
       call => call[0] === 'path:created'
     )?.[1]
     
     if (pathCreatedCallback) {
-      // 複数回描画をシミュレート
       await act(async () => {
         pathCreatedCallback()
         await new Promise(resolve => setTimeout(resolve, 20))
-      })
-      
-      await act(async () => {
         pathCreatedCallback()
         await new Promise(resolve => setTimeout(resolve, 20))
       })
     }
     
-    // アンドゥボタンが有効になることを確認
+    // アンドゥボタンが有効になることを確認（履歴が2以上ある場合）
     await waitFor(() => {
       const undoButton = screen.getByText('アンドゥ (Ctrl+Z)')
       expect(undoButton).not.toBeDisabled()
@@ -65,9 +64,15 @@ describe('App Advanced Tests', () => {
     
     // アンドゥを実行
     const undoButton = screen.getByText('アンドゥ (Ctrl+Z)')
-    await userEvent.click(undoButton)
+    await act(async () => {
+      await userEvent.click(undoButton)
+    })
     
-    expect(mockCanvas.loadFromJSON).toHaveBeenCalled()
+    // 少し待ってからアサーション
+    await waitFor(() => {
+      expect(mockCanvas.clear).toHaveBeenCalled()
+      expect(mockCanvas.loadFromJSON).toHaveBeenCalled()
+    })
     
     // リドゥボタンが有効になることを確認
     await waitFor(() => {
@@ -77,21 +82,30 @@ describe('App Advanced Tests', () => {
     
     // リドゥを実行
     const redoButton = screen.getByText('リドゥ (Ctrl+Y)')
-    await userEvent.click(redoButton)
+    await act(async () => {
+      await userEvent.click(redoButton)
+    })
     
-    expect(mockCanvas.loadFromJSON).toHaveBeenCalledTimes(2)
+    await waitFor(() => {
+      expect(mockCanvas.loadFromJSON).toHaveBeenCalledTimes(2)
+    })
   })
 
   test('keyboard shortcuts work correctly', async () => {
     render(<App />)
     
-    // 描画をシミュレートして履歴を作成
+    // clearモックを追加
+    mockCanvas.clear = jest.fn()
+    
+    // 描画をシミュレートして履歴を複数作成
     const pathCreatedCallback = mockCanvas.on.mock.calls.find(
       call => call[0] === 'path:created'
     )?.[1]
     
     if (pathCreatedCallback) {
       await act(async () => {
+        pathCreatedCallback()
+        await new Promise(resolve => setTimeout(resolve, 20))
         pathCreatedCallback()
         await new Promise(resolve => setTimeout(resolve, 20))
       })
@@ -121,6 +135,7 @@ describe('App Advanced Tests', () => {
     expect(preventDefaultSpy).toHaveBeenCalled()
     
     await waitFor(() => {
+      expect(mockCanvas.clear).toHaveBeenCalled()
       expect(mockCanvas.loadFromJSON).toHaveBeenCalled()
     })
     
@@ -186,23 +201,16 @@ describe('App Advanced Tests', () => {
 
   test('brush properties are correctly set', async () => {
     render(<App />)
-    
     // 初期化後のカウントをリセット
     jest.clearAllMocks()
-    
     // 赤色に変更
     const redButton = screen.getByText('赤色に変更')
     await userEvent.click(redButton)
-    
-    // 色・太さ変更ボタンは既存のPencilBrushがある場合は新しいインスタンスを作成しない
-    expect(fabric.PencilBrush).not.toHaveBeenCalled()
-    
+    expect(fabric.PencilBrush).toHaveBeenCalledTimes(1)
     // 太いブラシに変更
     const thickButton = screen.getByText('太くする')
     await userEvent.click(thickButton)
-    
-    // 同様に新しいインスタンスは作成されない
-    expect(fabric.PencilBrush).not.toHaveBeenCalled()
+    expect(fabric.PencilBrush).toHaveBeenCalledTimes(2)
   })
 
   test('eraser functionality', async () => {
@@ -249,21 +257,17 @@ describe('App Advanced Tests', () => {
 
   test('handles rapid tool changes', async () => {
     render(<App />)
-    
     // 初期化で1回呼ばれているので、それを考慮
     const initialCallCount = (fabric.PencilBrush as jest.Mock).mock.calls.length
-    
     // 複数のツール変更を素早く実行
     const redButton = screen.getByText('赤色に変更')
     const blackButton = screen.getByText('黒色に変更')
     const thickButton = screen.getByText('太くする')
-    
     await userEvent.click(redButton)
     await userEvent.click(thickButton)
     await userEvent.click(blackButton)
-    
-    // 色・太さ変更ボタンは既存のPencilBrushがある場合は新しいインスタンスを作成しない
-    expect(fabric.PencilBrush).toHaveBeenCalledTimes(initialCallCount)
+    // ボタンを押すたびに新しいインスタンスが作成される
+    expect(fabric.PencilBrush).toHaveBeenCalledTimes(initialCallCount + 3)
   })
 
   test('handles canvas events without errors', async () => {
