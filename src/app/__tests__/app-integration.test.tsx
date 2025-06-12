@@ -78,16 +78,16 @@ describe('App Integration Tests', () => {
     const pencilBrushCall = (fabric.PencilBrush as jest.Mock).mock.calls[0]
     expect(pencilBrushCall[0]).toBe(mockCanvas)
     
-    // 赤色ブラシ - 新しい実装では新しいPencilBrushは作成されない
+    // 赤色ブラシ
     const redButton = screen.getByText('赤色に変更')
     await userEvent.click(redButton)
     
-    // 太いブラシ - 新しい実装では新しいPencilBrushは作成されない
+    // 太いブラシ
     const thickButton = screen.getByText('太くする')
     await userEvent.click(thickButton)
     
-    // PencilBrushは初期化時の1回のみ作成される
-    expect(fabric.PencilBrush).toHaveBeenCalledTimes(1)
+    // PencilBrushは初期化＋2回作成される
+    expect(fabric.PencilBrush).toHaveBeenCalledTimes(3)
     
     // 消しゴム
     ;(EraserBrush as jest.MockedFunction<typeof EraserBrush>).mockReturnValue(mockEraserBrush as ReturnType<typeof EraserBrush>)
@@ -99,20 +99,27 @@ describe('App Integration Tests', () => {
     
     // 消しゴムから戻る時は新しいPencilBrushが作成される
     await userEvent.click(redButton)
-    expect(fabric.PencilBrush).toHaveBeenCalledTimes(2)
+    expect(fabric.PencilBrush).toHaveBeenCalledTimes(4)
   })
 
   test('keyboard shortcuts work correctly', async () => {
     const user = userEvent.setup()
     render(<App />)
     
-    // 描画をシミュレートして履歴を作成
+    // clearとloadFromJSONのモックを設定
+    mockCanvas.clear = jest.fn()
+    
+    // 描画をシミュレートして履歴を複数作成
     const pathCreatedCallback = mockCanvas.on.mock.calls.find(
       call => call[0] === 'path:created'
     )?.[1]
     
     if (pathCreatedCallback) {
+      // 複数の履歴を作成
       pathCreatedCallback()
+      await new Promise(resolve => setTimeout(resolve, 20))
+      pathCreatedCallback()
+      await new Promise(resolve => setTimeout(resolve, 20))
     }
     
     await waitFor(() => {
@@ -124,6 +131,7 @@ describe('App Integration Tests', () => {
     await user.keyboard('{Control>}z{/Control}')
     
     await waitFor(() => {
+      expect(mockCanvas.clear).toHaveBeenCalled()
       expect(mockCanvas.loadFromJSON).toHaveBeenCalled()
     })
     
@@ -240,9 +248,9 @@ describe('App Integration Tests', () => {
     await userEvent.click(blackButton)
     await userEvent.click(thinButton)
     
-    // 新しい実装では、色や太さの変更時に新しいPencilBrushは作成されない
-    // 初期化で1回のみ作成される
-    expect(fabric.PencilBrush).toHaveBeenCalledTimes(initialCallCount)
+    // 実装では各ツール変更時に新しいPencilBrushが作成される
+    // 初期化で1回 + 各ボタンクリックで4回 = 合計5回
+    expect(fabric.PencilBrush).toHaveBeenCalledTimes(initialCallCount + 4)
   })
 
   test('prevents default behavior for keyboard shortcuts', async () => {

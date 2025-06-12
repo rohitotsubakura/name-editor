@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { App } from '../page'
 import * as fabric from 'fabric'
@@ -12,9 +12,7 @@ const mockCanvas = {
   on: jest.fn(),
   renderAll: jest.fn(),
   toJSON: jest.fn(() => ({})),
-  loadFromJSON: jest.fn((data, callback) => {
-    if (callback) callback()
-  }),
+  loadFromJSON: jest.fn(() => Promise.resolve()),
 }
 
 const mockPencilBrush = {
@@ -30,7 +28,9 @@ const mockEraserBrush = {
 beforeEach(() => {
   jest.clearAllMocks()
   ;(fabric.Canvas as jest.Mock).mockReturnValue(mockCanvas)
-  ;(fabric.PencilBrush as jest.Mock).mockReturnValue(mockPencilBrush)
+  ;(fabric.PencilBrush as jest.Mock).mockReturnValue({ color: '#000000', width: 10 })
+  // loadFromJSONを毎回Promise形式に
+  mockCanvas.loadFromJSON = jest.fn(() => Promise.resolve())
 })
 
 describe('App Component', () => {
@@ -126,47 +126,262 @@ describe('App Component', () => {
     expect(redoButton).toBeDisabled()
   })
 
-  test('handles keyboard shortcuts for undo', async () => {
+test('handles keyboard shortcuts for undo', async () => {
+    // mockCanvas.toJSONが一意の値を返すようにする
+    let jsonCallCount = 0
+    mockCanvas.toJSON.mockImplementation(() => ({
+      objects: [],
+      version: '5.3.0',
+      callId: jsonCallCount++
+    }))
+    
     render(<App />)
     
-    // Ctrl+Zを押下
-    fireEvent.keyDown(window, {
-      key: 'z',
-      ctrlKey: true,
-      preventDefault: jest.fn(),
+    // 初期化を待つ - 初期状態が履歴に保存されるまで
+    await waitFor(() => {
+      expect(mockCanvas.toJSON).toHaveBeenCalled()
     })
     
-    // undoが呼ばれることを確認（初期状態では何も起こらない）
-    expect(mockCanvas.loadFromJSON).not.toHaveBeenCalled()
+    // path:createdイベントを取得
+    const pathCreatedCallback = mockCanvas.on.mock.calls.find(
+      call => call[0] === 'path:created'
+    )?.[1]
+    
+    expect(pathCreatedCallback).toBeDefined()
+    
+    // 1回目の描画 - これでhistoryIndex=1になる
+    await act(async () => {
+      pathCreatedCallback()
+      // saveStateのsetTimeoutを待つ
+      await new Promise(resolve => setTimeout(resolve, 50))
+    })
+    
+    // undoボタンが有効になることを確認
+    await waitFor(() => {
+      const undoButton = screen.getByText('アンドゥ (Ctrl+Z)')
+      expect(undoButton).not.toBeDisabled()
+    })
+    
+    // loadFromJSONのモックをクリア
+    mockCanvas.loadFromJSON.mockClear()
+    mockCanvas.clear = jest.fn()
+    mockCanvas.renderAll = jest.fn()
+    
+    // undo (Ctrl+Z) を発火
+    const preventDefaultMock = jest.fn()
+    await act(async () => {
+      const event = new KeyboardEvent('keydown', { 
+        key: 'z', 
+        ctrlKey: true,
+        bubbles: true 
+      })
+      Object.defineProperty(event, 'preventDefault', {
+        value: preventDefaultMock,
+        writable: true
+      })
+      window.dispatchEvent(event)
+    })
+    
+    // preventDefaultが呼ばれることを確認
+    expect(preventDefaultMock).toHaveBeenCalled()
+    
+    // loadFromJSONが呼ばれることを確認
+    await waitFor(() => {
+      expect(mockCanvas.clear).toHaveBeenCalled()
+      expect(mockCanvas.loadFromJSON).toHaveBeenCalledTimes(1)
+      expect(mockCanvas.renderAll).toHaveBeenCalled()
+    }, { timeout: 1000 })
   })
 
   test('handles keyboard shortcuts for redo', async () => {
+    // mockCanvas.toJSONが一意の値を返すようにする
+    let jsonCallCount = 0
+    mockCanvas.toJSON.mockImplementation(() => ({
+      objects: [],
+      version: '5.3.0',
+      callId: jsonCallCount++
+    }))
+    
     render(<App />)
     
-    // Ctrl+Yを押下
-    fireEvent.keyDown(window, {
-      key: 'y',
-      ctrlKey: true,
-      preventDefault: jest.fn(),
+    // 初期化を待つ
+    await waitFor(() => {
+      expect(mockCanvas.toJSON).toHaveBeenCalled()
     })
     
-    // redoが呼ばれることを確認（初期状態では何も起こらない）
-    expect(mockCanvas.loadFromJSON).not.toHaveBeenCalled()
+    // path:createdイベントを取得
+    const pathCreatedCallback = mockCanvas.on.mock.calls.find(
+      call => call[0] === 'path:created'
+    )?.[1]
+    
+    expect(pathCreatedCallback).toBeDefined()
+    
+    // 2回描画して履歴を増やす
+    await act(async () => {
+      pathCreatedCallback()
+      await new Promise(resolve => setTimeout(resolve, 50))
+    })
+    
+    await act(async () => {
+      pathCreatedCallback()
+      await new Promise(resolve => setTimeout(resolve, 50))
+    })
+    
+    // undoボタンが有効になることを確認
+    await waitFor(() => {
+      const undoButton = screen.getByText('アンドゥ (Ctrl+Z)')
+      expect(undoButton).not.toBeDisabled()
+    })
+    
+    // loadFromJSONのモックをクリア
+    mockCanvas.loadFromJSON.mockClear()
+    mockCanvas.clear = jest.fn()
+    mockCanvas.renderAll = jest.fn()
+    
+    // まずundoを実行
+    const preventDefaultMock1 = jest.fn()
+    await act(async () => {
+      const event1 = new KeyboardEvent('keydown', { 
+        key: 'z', 
+        ctrlKey: true,
+        bubbles: true 
+      })
+      Object.defineProperty(event1, 'preventDefault', {
+        value: preventDefaultMock1,
+        writable: true
+      })
+      window.dispatchEvent(event1)
+    })
+    
+    // undoの完了を待つ
+    await waitFor(() => {
+      expect(mockCanvas.loadFromJSON).toHaveBeenCalledTimes(1)
+    }, { timeout: 1000 })
+    
+    // redoボタンが有効になることを確認
+    await waitFor(() => {
+      const redoButton = screen.getByText('リドゥ (Ctrl+Y)')
+      expect(redoButton).not.toBeDisabled()
+    })
+    
+    // redo (Ctrl+Y) を発火
+    const preventDefaultMock2 = jest.fn()
+    await act(async () => {
+      const event2 = new KeyboardEvent('keydown', { 
+        key: 'y', 
+        ctrlKey: true,
+        bubbles: true 
+      })
+      Object.defineProperty(event2, 'preventDefault', {
+        value: preventDefaultMock2,
+        writable: true
+      })
+      window.dispatchEvent(event2)
+    })
+    
+    // preventDefaultが呼ばれることを確認
+    expect(preventDefaultMock2).toHaveBeenCalled()
+    
+    // loadFromJSONが合計2回呼ばれることを確認
+    await waitFor(() => {
+      expect(mockCanvas.loadFromJSON).toHaveBeenCalledTimes(2)
+    }, { timeout: 1000 })
   })
 
   test('handles keyboard shortcuts for redo with Shift+Ctrl+Z', async () => {
+    // mockCanvas.toJSONが一意の値を返すようにする
+    let jsonCallCount = 0
+    mockCanvas.toJSON.mockImplementation(() => ({
+      objects: [],
+      version: '5.3.0',
+      callId: jsonCallCount++
+    }))
+    
     render(<App />)
     
-    // Shift+Ctrl+Zを押下
-    fireEvent.keyDown(window, {
-      key: 'z',
-      ctrlKey: true,
-      shiftKey: true,
-      preventDefault: jest.fn(),
+    // 初期化を待つ
+    await waitFor(() => {
+      expect(mockCanvas.toJSON).toHaveBeenCalled()
     })
     
-    // redoが呼ばれることを確認（初期状態では何も起こらない）
-    expect(mockCanvas.loadFromJSON).not.toHaveBeenCalled()
+    // path:createdイベントを取得
+    const pathCreatedCallback = mockCanvas.on.mock.calls.find(
+      call => call[0] === 'path:created'
+    )?.[1]
+    
+    expect(pathCreatedCallback).toBeDefined()
+    
+    // 2回描画して履歴を増やす
+    await act(async () => {
+      pathCreatedCallback()
+      await new Promise(resolve => setTimeout(resolve, 50))
+    })
+    
+    await act(async () => {
+      pathCreatedCallback()
+      await new Promise(resolve => setTimeout(resolve, 50))
+    })
+    
+    // undoボタンが有効になることを確認
+    await waitFor(() => {
+      const undoButton = screen.getByText('アンドゥ (Ctrl+Z)')
+      expect(undoButton).not.toBeDisabled()
+    })
+    
+    // loadFromJSONのモックをクリア
+    mockCanvas.loadFromJSON.mockClear()
+    mockCanvas.clear = jest.fn()
+    mockCanvas.renderAll = jest.fn()
+    
+    // まずundoを実行
+    const preventDefaultMock1 = jest.fn()
+    await act(async () => {
+      const event1 = new KeyboardEvent('keydown', { 
+        key: 'z', 
+        ctrlKey: true,
+        bubbles: true 
+      })
+      Object.defineProperty(event1, 'preventDefault', {
+        value: preventDefaultMock1,
+        writable: true
+      })
+      window.dispatchEvent(event1)
+    })
+    
+    // undoの完了を待つ
+    await waitFor(() => {
+      expect(mockCanvas.loadFromJSON).toHaveBeenCalledTimes(1)
+    }, { timeout: 1000 })
+    
+    // redoボタンが有効になることを確認
+    await waitFor(() => {
+      const redoButton = screen.getByText('リドゥ (Ctrl+Y)')
+      expect(redoButton).not.toBeDisabled()
+    })
+    
+    // redo (Shift+Ctrl+Z) を発火
+    const preventDefaultMock2 = jest.fn()
+    await act(async () => {
+      const event2 = new KeyboardEvent('keydown', { 
+        key: 'z', 
+        ctrlKey: true, 
+        shiftKey: true,
+        bubbles: true 
+      })
+      Object.defineProperty(event2, 'preventDefault', {
+        value: preventDefaultMock2,
+        writable: true
+      })
+      window.dispatchEvent(event2)
+    })
+    
+    // preventDefaultが呼ばれることを確認
+    expect(preventDefaultMock2).toHaveBeenCalled()
+    
+    // loadFromJSONが合計2回呼ばれることを確認
+    await waitFor(() => {
+      expect(mockCanvas.loadFromJSON).toHaveBeenCalledTimes(2)
+    }, { timeout: 1000 })
   })
 
   test('cleans up canvas on unmount', () => {
