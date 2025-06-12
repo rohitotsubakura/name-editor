@@ -72,20 +72,39 @@ export const App = () => {
         newIndex = finalHistory.length - 1;
       }
       
+      // インデックスが配列の範囲内であることを確認
+      if (newIndex >= finalHistory.length) {
+        newIndex = finalHistory.length - 1;
+      }
+      if (newIndex < 0) {
+        newIndex = 0;
+      }
+      
+      // デバッグ情報
+      const debugInfo = {
+        beforeIndex: currentIndex,
+        afterIndex: newIndex,
+        historyLength: finalHistory.length,
+        newHistoryLength: newHistory.length
+      };
+      console.log('SaveState debug:', debugInfo);
+      
       // 状態を同期的に更新
       historyRef.current = finalHistory;
       historyIndexRef.current = newIndex;
       setHistory(finalHistory);
       setHistoryIndex(newIndex);
       
-      if (process.env.NODE_ENV === 'development') {
-        console.log('State saved:', {
-          historyLength: finalHistory.length,
-          currentIndex: newIndex,
-          canUndo: newIndex > 0,
-          canRedo: newIndex < finalHistory.length - 1
-        });
-      }
+      console.log('State saved:', {
+        historyLength: finalHistory.length,
+        currentIndex: newIndex,
+        canUndo: newIndex > 0,
+        canRedo: newIndex < finalHistory.length - 1,
+        beforeIndex: currentIndex,
+        afterIndex: newIndex
+      });
+      
+      alert(`State saved: length=${finalHistory.length}, index=${newIndex}`);
     };
 
     // 描画完了時に履歴を保存
@@ -94,41 +113,81 @@ export const App = () => {
     });
 
     // 消しゴム使用完了時に履歴を保存
-    // 複数のイベントを監視して確実に履歴を保存
+    // 重複保存を防ぐためのフラグ
+    let eraserSaveTimeout: NodeJS.Timeout | null = null;
+    
+    const saveStateAfterErasing = () => {
+      console.log('saveStateAfterErasing called');
+      // 既存のタイムアウトをクリア
+      if (eraserSaveTimeout) {
+        console.log('Clearing existing timeout');
+        clearTimeout(eraserSaveTimeout);
+      }
+      // 新しいタイムアウトを設定
+      eraserSaveTimeout = setTimeout(() => {
+        console.log('Executing delayed saveState for eraser');
+        saveState();
+        eraserSaveTimeout = null;
+        console.log('Eraser state saved');
+      }, 50); // 少し長めの遅延で重複を防ぐ
+    };
+
+    // 消しゴムの主要イベントのみ監視
     canvas.on("erasing:end", () => {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('Erasing end event fired');
-      }
-      setTimeout(saveState, 10);
-    });
-
-    // マウスアップ時に消しゴムの使用をチェック
-    let isErasingActive = false;
-    canvas.on("mouse:down", () => {
-      if (canvas.freeDrawingBrush instanceof EraserBrush) {
-        isErasingActive = true;
-        if (process.env.NODE_ENV === 'development') {
-          console.log('Eraser mouse down');
-        }
-      }
-    });
-
-    canvas.on("mouse:up", () => {
-      if (isErasingActive && canvas.freeDrawingBrush instanceof EraserBrush) {
-        isErasingActive = false;
-        if (process.env.NODE_ENV === 'development') {
-          console.log('Eraser mouse up - saving state');
-        }
-        setTimeout(saveState, 10);
-      }
+      console.log('Erasing end event fired');
+      saveStateAfterErasing();
     });
 
     // オブジェクトが変更された時（消しゴムで部分的に消された時）
     canvas.on("object:modified", () => {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('Object modified event fired');
+      if (canvas.freeDrawingBrush instanceof EraserBrush) {
+        console.log('Object modified by eraser');
+        saveStateAfterErasing();
       }
-      setTimeout(saveState, 10);
+    });
+
+    // 消しゴムの詳細なイベント監視
+    canvas.on("erasing:start", () => {
+      console.log('Erasing start event fired');
+    });
+
+    // オブジェクトが削除された時
+    canvas.on("object:removed", () => {
+      console.log('Object removed event fired');
+      if (canvas.freeDrawingBrush instanceof EraserBrush) {
+        console.log('Object removed by eraser');
+        saveStateAfterErasing();
+      }
+    });
+
+    // パスが削除された時
+    canvas.on("path:removed", () => {
+      console.log('Path removed event fired');
+      if (canvas.freeDrawingBrush instanceof EraserBrush) {
+        console.log('Path removed by eraser');
+        saveStateAfterErasing();
+      }
+    });
+
+    // マウスイベントでの消しゴム監視
+    let eraserMouseDown = false;
+    canvas.on("mouse:down", (e) => {
+      if (canvas.freeDrawingBrush instanceof EraserBrush) {
+        console.log('Mouse down with eraser', e);
+        eraserMouseDown = true;
+      }
+    });
+
+    canvas.on("mouse:up", (e) => {
+      if (canvas.freeDrawingBrush instanceof EraserBrush && eraserMouseDown) {
+        console.log('Mouse up with eraser', e);
+        eraserMouseDown = false;
+        // マウスアップ時に強制的に履歴を保存
+        setTimeout(() => {
+          console.log('Force saving state after eraser mouse up');
+          saveState();
+        }, 100);
+      }
     });
 
       return () => {
@@ -162,30 +221,94 @@ export const App = () => {
 
   // アンドゥ機能
   const undo = useCallback(() => {
-    if (!canvas || historyIndexRef.current <= 0) return;
+    console.log('=== UNDO FUNCTION START ===');
+    const debugInfo = {
+      hasCanvas: !!canvas,
+      currentIndex: historyIndexRef.current,
+      stateIndex: historyIndex,
+      historyLength: historyRef.current.length,
+      condition: historyIndexRef.current <= 0
+    };
+    console.log('Undo function called', debugInfo);
+    
+    if (!canvas) {
+      console.log('Undo early return - no canvas');
+      return;
+    }
+    console.log('Canvas check passed');
+    
+    if (historyIndexRef.current <= 0) {
+      console.log('Undo early return - at beginning');
+      return;
+    }
+    console.log('Beginning check passed');
+    
+    if (historyIndexRef.current >= historyRef.current.length) {
+      alert(`Index out of bounds: ${historyIndexRef.current} >= ${historyRef.current.length}`);
+      console.log('Undo early return - index out of bounds, fixing...');
+      // インデックスを修正
+      const correctedIndex = historyRef.current.length - 1;
+      historyIndexRef.current = correctedIndex;
+      setHistoryIndex(correctedIndex);
+      alert(`Index corrected to: ${correctedIndex}`);
+      console.log(`Index corrected to: ${correctedIndex}`);
+      // 修正後、アンドゥを続行
+    }
+    console.log('Bounds check passed or corrected');
+    
+    // 修正後、再度条件をチェック
+    if (historyIndexRef.current <= 0) {
+      console.log('Undo early return - at beginning after correction');
+      return;
+    }
+    console.log('Final beginning check passed');
     
     const currentHistory = historyRef.current;
     const newIndex = historyIndexRef.current - 1;
     const prevState = currentHistory[newIndex];
     
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Undo:', {
-        currentIndex: historyIndexRef.current,
-        newIndex,
-        historyLength: currentHistory.length,
-        hasState: !!prevState
-      });
-    }
+    console.log('Undo processing:', {
+      currentIndex: historyIndexRef.current,
+      newIndex,
+      historyLength: currentHistory.length,
+      hasState: !!prevState
+    });
     
+    console.log('Setting isUpdatingHistory to true');
     setIsUpdatingHistory(true);
     
-    canvas.loadFromJSON(prevState, () => {
-      canvas.renderAll();
-      setHistoryIndex(newIndex);
-      historyIndexRef.current = newIndex;
+    try {
+      if (!prevState) {
+        console.error('Error: prevState is null or undefined');
+        setIsUpdatingHistory(false);
+        return;
+      }
+      console.log('prevState exists, calling loadFromJSON');
+      
+      canvas.loadFromJSON(prevState, () => {
+        alert(`UNDO CALLBACK EXECUTED! Setting index to ${newIndex}`);
+        console.log('=== UNDO CALLBACK START ===');
+        console.log('Undo loadFromJSON callback executed');
+        canvas.renderAll();
+        console.log('Canvas rendered');
+        // 描画モードを確実に有効にする
+        canvas.isDrawingMode = true;
+        console.log('Drawing mode enabled');
+        setHistoryIndex(newIndex);
+        console.log('setHistoryIndex called with:', newIndex);
+        historyIndexRef.current = newIndex;
+        console.log('historyIndexRef updated to:', newIndex);
+        setIsUpdatingHistory(false);
+        console.log('isUpdatingHistory set to false');
+        console.log('=== UNDO CALLBACK END ===');
+      });
+      console.log('loadFromJSON called, waiting for callback');
+    } catch (error) {
+      console.error('Undo error:', error);
       setIsUpdatingHistory(false);
-    });
-  }, [canvas]);
+    }
+    console.log('=== UNDO FUNCTION END ===');
+  }, [canvas, historyIndex]);
 
   // リドゥ機能
   const redo = useCallback(() => {
@@ -195,19 +318,19 @@ export const App = () => {
     const newIndex = historyIndexRef.current + 1;
     const nextState = currentHistory[newIndex];
     
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Redo:', {
-        currentIndex: historyIndexRef.current,
-        newIndex,
-        historyLength: currentHistory.length,
-        hasState: !!nextState
-      });
-    }
+    console.log('Redo:', {
+      currentIndex: historyIndexRef.current,
+      newIndex,
+      historyLength: currentHistory.length,
+      hasState: !!nextState
+    });
     
     setIsUpdatingHistory(true);
     
     canvas.loadFromJSON(nextState, () => {
       canvas.renderAll();
+      // 描画モードを確実に有効にする
+      canvas.isDrawingMode = true;
       setHistoryIndex(newIndex);
       historyIndexRef.current = newIndex;
       setIsUpdatingHistory(false);
@@ -243,6 +366,7 @@ export const App = () => {
      canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
      canvas.freeDrawingBrush.width = width;
    }
+   canvas.isDrawingMode = true;
    setColor("#ff0000");
  };
 
@@ -255,6 +379,7 @@ export const App = () => {
      canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
      canvas.freeDrawingBrush.width = width;
    }
+   canvas.isDrawingMode = true;
    setColor("#000000");
  };
 
@@ -267,6 +392,7 @@ export const App = () => {
      canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
      canvas.freeDrawingBrush.color = color;
    }
+   canvas.isDrawingMode = true;
    setWidth(20);
  };
 
@@ -279,6 +405,7 @@ export const App = () => {
      canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
      canvas.freeDrawingBrush.color = color;
    }
+   canvas.isDrawingMode = true;
    setWidth(10);
  };
 
@@ -289,6 +416,7 @@ export const App = () => {
   const eraser = new EraserBrush(canvas);
   canvas.freeDrawingBrush = eraser;
   canvas.freeDrawingBrush.width = 20;
+  canvas.isDrawingMode = true;
  };
 
  return (
